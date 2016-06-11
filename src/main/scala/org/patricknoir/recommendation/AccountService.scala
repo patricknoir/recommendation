@@ -4,26 +4,28 @@ import cats.data._
 import cats.std.all._
 import cats.syntax.all._
 
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 /**
  * Created by patrick on 11/06/2016.
  */
-trait AccountService[Account, Bet, Selection] {
+sealed trait AccountService[Account, Bet, Selection, Repository] {
 
   type Suggestions = Map[Selection, Double]
 
-  type Error[A] = Xor[List[String], A]
-  type Response[A] = Error[A]
+  type Response[A] = Kleisli[Future, Repository, A] //Xor[List[String], A]
 
   def account(accountNo: String): Response[Account]
   def bet(id: String): Response[Bet]
-  def selection(id: String): Response[Selection]
+  def selection(id: String): Response[Bet]
   def selectionsForBet(bet: Bet): Response[Set[Selection]]
   def betsForSelection(selection: Selection): Response[Set[Bet]]
-  def betsPerAccount(account: Account): Response[Set[Bet]]
+  def betsForAccount(account: Account): Response[Set[Bet]]
   def accountsForBet(bet: Bet): Response[Set[Account]]
 
   def selectionsForAccount(account: Account): Response[Set[Selection]] = for {
-    bets <- betsPerAccount(account)
+    bets <- betsForAccount(account)
     selections <- bets.map(selectionsForBet).reduce(_ |+| _)
   } yield selections
 
