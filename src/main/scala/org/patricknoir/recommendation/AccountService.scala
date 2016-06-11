@@ -3,6 +3,7 @@ package org.patricknoir.recommendation
 import cats.data._
 import cats.std.all._
 import cats.syntax.all._
+import cats._
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -26,12 +27,12 @@ sealed trait AccountService[Account, Bet, Selection, Repository] {
 
   def selectionsForAccount(account: Account): Response[Set[Selection]] = for {
     bets <- betsForAccount(account)
-    selections <- bets.map(selectionsForBet).reduce(_ |+| _)
+    selections <- mapReduce(bets)(selectionsForBet) //.reduce(_ |+| _)
   } yield selections
 
   def accountsWithSelection(selection: Selection): Response[Set[Account]] = for {
     bets <- betsForSelection(selection)
-    accounts <- bets.map(accountsForBet).reduce(_ |+| _)
+    accounts <- mapReduce(bets)(accountsForBet) //.reduce(_ |+| _)
   } yield accounts
 
   def affinity(sels1: Set[Selection], sels2: Set[Selection]): Double =
@@ -42,13 +43,13 @@ sealed trait AccountService[Account, Bet, Selection, Repository] {
     (others -- mySels).map((_, strength)).toMap[Selection, Double]
   }
 
-  def calculateSuggestions(mySels: Set[Selection], otherAccounts: Set[Account]): Response[Suggestions] = (
+  def calculateSuggestions(mySels: Set[Selection], otherAccounts: Set[Account]): Response[Suggestions] = mapReduce(
     for {
       account <- otherAccounts
       otherSelections = selectionsForAccount(account)
       suggestions = otherSelections.map(suggest(mySels, _))
     } yield suggestions
-  ).reduce(_ |+| _)
+  )(identity)
 
   def recommend(account: Account, selection: Selection): Response[Suggestions] = for {
     mySelections <- selectionsForAccount(account)
@@ -56,4 +57,5 @@ sealed trait AccountService[Account, Bet, Selection, Repository] {
     suggestions <- calculateSuggestions(mySelections, otherAccounts)
   } yield suggestions
 
+  private def mapReduce[F[_]: Foldable, A, M: Monoid](fa: F[A])(f: A => M): M = fa.foldMap(f)
 }
